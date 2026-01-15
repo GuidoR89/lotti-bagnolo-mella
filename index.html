@@ -14,7 +14,7 @@
     <style>
         body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
         
-        /* Stili per il Lightbox con Zoom */
+        /* Stili per il Lightbox con Zoom e Drag tramite Transform */
         #lightbox {
             display: none;
             position: fixed;
@@ -27,30 +27,31 @@
             justify-content: center;
             align-items: center;
             overflow: hidden;
+            touch-action: none;
         }
         #lightbox-container {
             position: relative;
-            cursor: zoom-in;
-            transition: transform 0.3s ease;
-            max-width: 95%;
-            max-height: 90%;
             display: flex;
             justify-content: center;
             align-items: center;
+            width: 100%;
+            height: 100%;
+            cursor: zoom-in;
         }
         #lightbox-img {
-            max-width: 100%;
-            max-height: 100%;
-            border-radius: 4px;
+            max-width: 90%;
+            max-height: 90%;
+            transition: transform 0.3s ease-out;
             user-select: none;
             -webkit-user-drag: none;
+            transform-origin: center center;
         }
-        .zoomed {
-            cursor: grab !important;
-            transform: scale(2.5);
+        .is-zoomed #lightbox-img {
+            cursor: grab;
         }
-        .zoomed:active {
-            cursor: grabbing !important;
+        .is-dragging #lightbox-img {
+            cursor: grabbing;
+            transition: none; /* Rimuove transizione durante il drag per reattività */
         }
         
         .justify-text {
@@ -75,13 +76,12 @@
             .map-wrapper { height: 350px; }
         }
 
-        /* Titoli sezioni uniformi - Margine ridotto */
         .section-title {
             text-align: center;
             margin-bottom: 2rem; 
         }
         .section-title h2 {
-            font-size: 1.875rem; /* text-3xl */
+            font-size: 1.875rem;
             line-height: 2.25rem;
             font-weight: 900;
             text-transform: uppercase;
@@ -104,12 +104,14 @@
 <body class="bg-gray-50 text-gray-800">
 
     <!-- Lightbox -->
-    <div id="lightbox" onclick="closeLightbox()">
-        <div id="lightbox-container" onclick="toggleZoom(event)">
+    <div id="lightbox">
+        <div id="lightbox-container" onclick="handleLightboxClick(event)">
             <img id="lightbox-img" src="" alt="Planimetria Ingrandita">
         </div>
-        <button class="absolute top-5 right-5 text-white text-4xl z-[10000]">&times;</button>
-        <div class="absolute bottom-5 left-1/2 -translate-x-1/2 text-white/50 text-xs hidden md:block text-center px-4">Clicca sull'immagine per zoomare e trascina</div>
+        <button onclick="closeLightbox()" class="absolute top-5 right-5 text-white text-5xl z-[10000] hover:text-gray-300 transition">&times;</button>
+        <div class="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium bg-black/40 px-6 py-2 rounded-full backdrop-blur-md pointer-events-none">
+            Clicca per zoomare • Trascina per muoverti
+        </div>
     </div>
 
     <!-- Header -->
@@ -236,7 +238,6 @@
             
             <div class="max-w-5xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
                 <div class="text-center lg:text-left">
-                    <!-- Testo rimpicciolito e grigio come richiesto -->
                     <p class="text-gray-400 text-base md:text-lg font-light mb-10 leading-relaxed text-balance italic">
                         Contatta lo Studio Castelvedere per un colloquio informativo, per visionare la documentazione tecnica o per un sopralluogo nell'area.
                     </p>
@@ -273,92 +274,105 @@
     </footer>
 
     <script>
-        let isZoomed = false;
-        let startX, startY, scrollLeft, scrollTop;
+        // Logica Zoom Planimetria
+        const lb = document.getElementById('lightbox');
+        const lbImg = document.getElementById('lightbox-img');
+        const container = document.getElementById('lightbox-container');
+
+        let scale = 1;
+        let isDragging = false;
+        let startX, startY;
+        let translateX = 0;
+        let translateY = 0;
 
         function openLightbox(src) {
-            const lb = document.getElementById('lightbox');
-            const img = document.getElementById('lightbox-img');
-            img.src = src;
+            lbImg.src = src;
             lb.style.display = 'flex';
             document.body.style.overflow = 'hidden';
             resetZoom();
         }
 
         function closeLightbox() {
-            document.getElementById('lightbox').style.display = 'none';
+            lb.style.display = 'none';
             document.body.style.overflow = 'auto';
             resetZoom();
         }
 
-        function toggleZoom(e) {
-            e.stopPropagation();
-            const container = document.getElementById('lightbox-container');
-            isZoomed = !isZoomed;
+        function resetZoom() {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            lb.classList.remove('is-zoomed', 'is-dragging');
+            updateTransform();
+        }
+
+        function updateTransform() {
+            lbImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        // Click per zoomare/dezoomare
+        function handleLightboxClick(e) {
+            // Se clicco fuori dall'immagine o sono in modalità drag, non fare nulla
+            if (e.target !== lbImg && e.target !== container) return;
             
-            if (isZoomed) {
-                container.classList.add('zoomed');
-                initDrag();
+            // Se clicco sullo sfondo scuro (container) mentre NON sono zoomato, chiudo
+            if (e.target === container && scale === 1) {
+                closeLightbox();
+                return;
+            }
+
+            // Toggle Zoom
+            if (scale === 1) {
+                scale = 2.5;
+                lb.classList.add('is-zoomed');
             } else {
                 resetZoom();
             }
+            updateTransform();
         }
 
-        function resetZoom() {
-            const container = document.getElementById('lightbox-container');
-            isZoomed = false;
-            container.classList.remove('zoomed');
-            container.style.transform = '';
-            container.onmousedown = null;
-            window.onmousemove = null;
-            window.onmouseup = null;
-        }
+        // Gestione Drag (Mouse & Touch)
+        const startDrag = (e) => {
+            if (scale === 1) return;
+            isDragging = true;
+            lb.classList.add('is-dragging');
+            
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            
+            startX = clientX - translateX;
+            startY = clientY - translateY;
+        };
 
-        function initDrag() {
-            const container = document.getElementById('lightbox-container');
-            const lb = document.getElementById('lightbox');
+        const onDrag = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            
+            translateX = clientX - startX;
+            translateY = clientY - startY;
+            
+            updateTransform();
+        };
 
-            container.onmousedown = function(e) {
-                if (!isZoomed) return;
-                startX = e.pageX - lb.offsetLeft;
-                startY = e.pageY - lb.offsetTop;
-                scrollLeft = lb.scrollLeft;
-                scrollTop = lb.scrollTop;
+        const endDrag = () => {
+            isDragging = false;
+            lb.classList.remove('is-dragging');
+        };
 
-                window.onmousemove = function(e) {
-                    const x = e.pageX - lb.offsetLeft;
-                    const y = e.pageY - lb.offsetTop;
-                    const walkX = (x - startX) * 2;
-                    const walkY = (y - startY) * 2;
-                    lb.scrollLeft = scrollLeft - walkX;
-                    lb.scrollTop = scrollTop - walkY;
-                };
+        // Eventi Mouse
+        lbImg.addEventListener('mousedown', startDrag);
+        window.addEventListener('mousemove', onDrag);
+        window.addEventListener('mouseup', endDrag);
 
-                window.onmouseup = function() {
-                    window.onmousemove = null;
-                };
-            };
-        }
+        // Eventi Touch
+        lbImg.addEventListener('touchstart', startDrag);
+        window.addEventListener('touchmove', onDrag, { passive: false });
+        window.addEventListener('touchend', endDrag);
 
-        const lb = document.getElementById('lightbox');
-        lb.addEventListener('touchstart', (e) => {
-            if (!isZoomed) return;
-            startX = e.touches[0].pageX - lb.offsetLeft;
-            startY = e.touches[0].pageY - lb.offsetTop;
-            scrollLeft = lb.scrollLeft;
-            scrollTop = lb.scrollTop;
-        });
-
-        lb.addEventListener('touchmove', (e) => {
-            if (!isZoomed) return;
-            const x = e.touches[0].pageX - lb.offsetLeft;
-            const y = e.touches[0].pageY - lb.offsetTop;
-            const walkX = (x - startX) * 2;
-            const walkY = (y - startY) * 2;
-            lb.scrollLeft = scrollLeft - walkX;
-            lb.scrollTop = scrollTop - walkY;
-        });
-
+        // Escape per chiudere
         document.addEventListener('keydown', (e) => { if (e.key === "Escape") closeLightbox(); });
     </script>
 </body>
